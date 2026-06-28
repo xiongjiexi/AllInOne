@@ -159,17 +159,27 @@ impl PtyPool {
     }
 }
 
-/// 探测 Git Bash 可执行路径
+/// 探测 shell 可执行路径（跨平台）
+/// - Windows: 优先 Git Bash（Git for Windows 安装路径）
+/// - macOS/Linux: 直接用 bash（系统自带或 Homebrew 安装）
 fn detect_bash() -> String {
-    let candidates = [
-        r"C:\Program Files\Git\bin\bash.exe",
-        r"C:\Program Files\Git\usr\bin\bash.exe",
-        r"C:\Program Files (x86)\Git\bin\bash.exe",
-    ];
-    for c in candidates {
-        if std::path::Path::new(c).exists() {
-            return c.to_string();
+    #[cfg(windows)]
+    {
+        let candidates = [
+            r"C:\Program Files\Git\bin\bash.exe",
+            r"C:\Program Files\Git\usr\bin\bash.exe",
+            r"C:\Program Files (x86)\Git\bin\bash.exe",
+        ];
+        for c in candidates {
+            if std::path::Path::new(c).exists() {
+                return c.to_string();
+            }
         }
+        "bash".to_string() // 依赖 PATH
     }
-    "bash".to_string() // 依赖 PATH
+    #[cfg(not(windows))]
+    {
+        // macOS 自带 /bin/bash；如果用户装了 Homebrew 版也覆盖
+        "bash".to_string()
+    }
 }
