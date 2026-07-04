@@ -2,7 +2,7 @@
 
 > 创建日期：2026-06-27
 > 最后更新：2026-06-27
-> 状态：需求已确认，待进入实现
+> 状态：**P0 已实现**，P1/P2 待迭代（Timer 已移除，定时执行统一由 Script Runner 承担）
 > 所属应用：AllInOne（Tauri 2.0 + Vue 3）
 
 ---
@@ -328,6 +328,8 @@ templates:
 | F8.3 | 当前工具高亮显示 | P0 |
 | F8.4 | 工具切换无动画延迟（v-show 而非 v-if） | P1 |
 
+> **F9 Timer 已移除**：定时执行需求统一由独立的 Script Runner 工具承担（见 [ScriptRunner-需求文档.md](./ScriptRunner-需求文档.md)），GitFast 专注于单仓库交互式操作。
+
 ## 五、非功能需求
 
 | 项 | 要求 |
@@ -561,17 +563,19 @@ repositories:
 
 ## 九、实现优先级
 
-### P0（MVP 第一版）
+### P0（MVP 第一版）— ✅ 已全部实现
 
-1. 工具切换器（Toolbar 改造）
-2. 配置文件加载（系统对话框选 YAML + js-yaml 解析）
-3. 默认配置（内置 10 个模板 + 示例分组）
-4. 仓库列表（配置驱动 + 分组折叠）
-5. 单仓库 xterm.js 终端（spawn bash、双向通信）
-6. 预设模板按钮（无参数的：sync/fetch/status/log/branch-list/stash/commit-checklist）
-7. 带参数模板（branch-switch/pull-branch/rebase-branch，下拉选分支）
-8. 单条命令输入执行
-9. 清屏
+1. ✅ 工具切换器（Toolbar 改造）
+2. ✅ 配置文件加载（系统对话框选 YAML + js-yaml 解析）
+3. ✅ 默认配置（内置 10 个模板 + 示例分组）
+4. ✅ 仓库列表（配置驱动 + 分组折叠）
+5. ✅ 单仓库 xterm.js 终端（spawn bash、双向通信）
+6. ✅ 预设模板按钮（无参数的：sync/fetch/status/log/branch-list/stash/commit-checklist）
+7. ✅ 带参数模板（branch-switch/pull-branch/rebase-branch，下拉选分支）
+8. ✅ 单条命令输入执行
+9. ✅ 清屏
+
+> Timer 已移除：定时执行需求统一由 [Script Runner](./ScriptRunner-需求文档.md) 承担。
 
 ### P1（体验完善）
 

@@ -1,0 +1,33 @@
+# Code Review 工具配置文件示例
+# 复制为 review-config.yaml 后修改实际值
+
+version: 1
+
+# 日志目录（默认配置文件同目录 logs/ 子目录）
+logDir: ./logs
+
+# 平台配置（全局共享，所有项目用同一个 token）
+platform:
+  url: https://devops.tone.tcl.com
+  accessToken: 43656efa9b0b4b4aaeb517178b3e51051782974838799
+
+# 评审脚本路径（统一一个脚本，参数通过环境变量注入）
+script: D:/Jesse/allinone/scripts/git-review.sh
+
+# 项目列表
+projects:
+  - id: plm-pdm-service
+    name: PLM-PDM 服务
+    repoPath: D:/code/plm-pdm-service
+    repoId: "950381585941725184"
+    fullName: rd-plm/plm-pdm-service
+    defaultDestBranch: tct-develop-xjx2
+    # 默认源分支（配置后跳过分支列表加载，避免卡顿）
+    defaultSrcBranch: tct-develop-xjx2
+
+  # - id: another-project
+  #   name: 另一个项目
+  #   repoPath: D:/code/another
+  #   repoId: "1234567890"
+  #   fullName: team/another
+  #   defaultDestBranch: develop

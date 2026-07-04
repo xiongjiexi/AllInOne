@@ -1,5 +1,8 @@
 <script setup lang="ts">
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useChecklistStore } from '../stores/checklist'
+import { openInExplorer } from '../lib/fs'
+import type { FileMeta } from '../stores/checklist'
 
 const store = useChecklistStore()
 
@@ -30,6 +33,56 @@ function onTogglePin(path: string, e: MouseEvent) {
   e.stopPropagation()
   store.toggleFilePinState(path)
 }
+
+// ===== 右键上下文菜单 =====
+// 自定义浮层菜单：打开所在文件夹（在资源管理器中打开并选中）
+const ctxMenu = ref<{ visible: boolean; x: number; y: number; file: FileMeta | null }>({
+  visible: false,
+  x: 0,
+  y: 0,
+  file: null,
+})
+
+function onFileContextmenu(file: FileMeta, e: MouseEvent) {
+  e.preventDefault()
+  e.stopPropagation()
+  // 防止菜单超出窗口右下边界（菜单宽约 200、高约 48）
+  const menuW = 200, menuH = 48
+  const x = Math.min(e.clientX, window.innerWidth - menuW - 8)
+  const y = Math.min(e.clientY, window.innerHeight - menuH - 8)
+  ctxMenu.value = { visible: true, x, y, file }
+}
+
+function closeCtxMenu() {
+  ctxMenu.value.visible = false
+  ctxMenu.value.file = null
+}
+
+async function onCtxOpenFolder() {
+  const f = ctxMenu.value.file
+  closeCtxMenu()
+  if (!f) return
+  try {
+    await openInExplorer(f.path)
+  } catch (e: any) {
+    alert(`打开文件夹失败: ${e?.message ?? e}`)
+  }
+}
+
+function onDocClick() {
+  if (ctxMenu.value.visible) closeCtxMenu()
+}
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && ctxMenu.value.visible) closeCtxMenu()
+}
+onMounted(() => {
+  document.addEventListener('click', onDocClick)
+  document.addEventListener('keydown', onKeydown)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('click', onDocClick)
+  document.removeEventListener('keydown', onKeydown)
+})
 </script>
 
 <template>
@@ -85,6 +138,7 @@ function onTogglePin(path: string, e: MouseEvent) {
           :key="f.path"
           :class="['file-item', { active: f.path === store.currentFilePath, pinned: store.isFilePinnedState(f.path) }]"
           @click="onOpen(f.path, f.name)"
+          @contextmenu="onFileContextmenu(f, $event)"
           :title="f.name"
         >
           <span class="file-icon">{{ store.isFilePinnedState(f.path) ? '📌' : '📄' }}</span>
@@ -99,6 +153,19 @@ function onTogglePin(path: string, e: MouseEvent) {
           </button>
         </li>
       </ul>
+    </div>
+
+    <!-- 右键上下文菜单 -->
+    <div
+      v-if="ctxMenu.visible && ctxMenu.file"
+      class="ctx-menu"
+      :style="{ left: ctxMenu.x + 'px', top: ctxMenu.y + 'px' }"
+      @click.stop
+    >
+      <div class="ctx-item" @click="onCtxOpenFolder">
+        <span class="ctx-icon">📁</span>
+        <span>打开所在文件夹</span>
+      </div>
     </div>
   </aside>
 </template>
@@ -226,5 +293,41 @@ ul {
 }
 .pin-btn.active {
   color: var(--accent);
+}
+
+/* 右键上下文菜单 */
+.ctx-menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 180px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 4px;
+  animation: ctxFadeIn 0.12s ease-out;
+}
+@keyframes ctxFadeIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+.ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--text);
+  transition: background 0.1s;
+}
+.ctx-item:hover {
+  background: var(--accent-soft);
+}
+.ctx-icon {
+  font-size: 14px;
+  width: 16px;
+  text-align: center;
 }
 </style>

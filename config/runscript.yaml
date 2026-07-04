@@ -1,0 +1,21 @@
+version: 1
+logDir: D:/Jesse/allinone/logs   # 日志目录（默认配置文件同目录的 logs/）
+tasks:
+  - id: daily-pull
+    name: 每日拉取
+    script: D:/scripts/deploy.sh
+    workdir: D:/Jesse/allinone
+    rule:
+      type: daily
+      time: "09:00"
+    enabled: false
+    timeout: 60
+
+  - id: rebase-tct-develop
+    name: 每60分钟更新
+    script: D:/plm-xdm/rebase-tct-develop.bat
+    workdir: D:/plm-xdm
+    rule:
+      type: interval
+      minutes: 60
+    enabled: false

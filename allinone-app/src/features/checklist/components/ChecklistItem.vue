@@ -5,10 +5,10 @@ import type { CheckItem } from '../lib/markdown'
 const props = defineProps<{
   item: CheckItem
   pinned?: boolean
-  /** 是否正在被拖拽（外部传入，用于添加视觉态） */
-  dragging?: boolean
-  /** 是否是当前拖放目标项（外部传入，用于显示插入指示线） */
-  dragOverPosition?: 'before' | 'after' | null
+  /** 是否为第一项（用于禁用上移按钮） */
+  isFirst?: boolean
+  /** 是否为最后一项（用于禁用下移按钮） */
+  isLast?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -16,11 +16,8 @@ const emit = defineEmits<{
   edit: [item: CheckItem, text: string]
   delete: [item: CheckItem]
   togglePin: [item: CheckItem]
-  dragstart: [item: CheckItem, e: DragEvent]
-  dragenter: [item: CheckItem, e: DragEvent]
-  dragleave: [item: CheckItem, e: DragEvent]
-  dragover: [item: CheckItem, e: DragEvent]
-  drop: [item: CheckItem, e: DragEvent]
+  moveUp: [item: CheckItem]
+  moveDown: [item: CheckItem]
 }>()
 
 const editing = ref(false)
@@ -69,43 +66,6 @@ function onKeydown(e: KeyboardEvent) {
     cancelEdit()
   }
 }
-
-// ===== 拖拽 =====
-// 仅在非编辑模式下允许拖拽；编辑时 textarea 需要文本选区
-function onDragstart(e: DragEvent) {
-  if (editing.value) {
-    e.preventDefault()
-    return
-  }
-  // 必须设置 data，否则 Firefox 不会触发 drag 事件
-  if (e.dataTransfer) {
-    e.dataTransfer.effectAllowed = 'move'
-    e.dataTransfer.setData('text/plain', String(props.item.lineIndex))
-  }
-  emit('dragstart', props.item, e)
-}
-
-function onDragenter(e: DragEvent) {
-  e.preventDefault()
-  emit('dragenter', props.item, e)
-}
-
-function onDragleave(e: DragEvent) {
-  emit('dragleave', props.item, e)
-}
-
-// dragover 必须在子项上 preventDefault，否则 drop 不会触发
-function onDragover(e: DragEvent) {
-  e.preventDefault()
-  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
-  emit('dragover', props.item, e)
-}
-
-// 子项自身的 drop
-function onDrop(e: DragEvent) {
-  e.preventDefault()
-  emit('drop', props.item, e)
-}
 </script>
 
 <template>
@@ -114,21 +74,9 @@ function onDrop(e: DragEvent) {
     :class="{
       checked: item.checked,
       pinned: pinned,
-      dragging: dragging,
-      'drag-before': dragOverPosition === 'before',
-      'drag-after': dragOverPosition === 'after',
     }"
     :style="{ paddingLeft: 12 + item.indent * 18 + 'px' }"
-    :draggable="!editing"
-    @dragstart="onDragstart"
-    @dragenter="onDragenter"
-    @dragleave="onDragleave"
-    @dragover="onDragover"
-    @drop="onDrop"
   >
-    <!-- 拖拽手柄（hover 显示，作为视觉提示） -->
-    <div class="drag-handle" title="拖动调整位置">⠿</div>
-
     <button
       class="checkbox"
       :class="{ checked: item.checked }"
@@ -159,6 +107,18 @@ function onDrop(e: DragEvent) {
 
     <div class="item-actions">
       <button
+        class="btn-icon btn-ghost item-action move-action"
+        :disabled="isFirst"
+        :title="isFirst ? '已是第一项' : '上移'"
+        @click="emit('moveUp', item)"
+      >▲</button>
+      <button
+        class="btn-icon btn-ghost item-action move-action"
+        :disabled="isLast"
+        :title="isLast ? '已是最后一项' : '下移'"
+        @click="emit('moveDown', item)"
+      >▼</button>
+      <button
         class="btn-icon btn-ghost item-action pin-action"
         :class="{ active: pinned }"
         :title="pinned ? '取消置顶' : '置顶'"
@@ -185,28 +145,8 @@ function onDrop(e: DragEvent) {
 .checklist-item:hover {
   background: var(--bg-soft);
 }
-.checklist-item:hover .item-actions,
-.checklist-item:hover .drag-handle {
+.checklist-item:hover .item-actions {
   opacity: 1;
-}
-
-/* 拖拽手柄 */
-.drag-handle {
-  position: absolute;
-  left: -2px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--text-muted);
-  font-size: 12px;
-  cursor: grab;
-  opacity: 0;
-  transition: opacity 0.15s;
-  user-select: none;
-  width: 10px;
-  line-height: 1;
-}
-.drag-handle:active {
-  cursor: grabbing;
 }
 
 /* 置顶项：左侧蓝色条 + 浅色背景 */
@@ -217,34 +157,6 @@ function onDrop(e: DragEvent) {
 }
 .checklist-item.pinned:hover {
   background: var(--accent-soft);
-}
-/* 置顶项手柄内移到边条右侧 */
-.checklist-item.pinned .drag-handle {
-  left: 12px;
-}
-
-/* 拖拽中：源项半透明 */
-.checklist-item.dragging {
-  opacity: 0.4;
-}
-
-/* 拖放指示线：before = 顶部一条线，after = 底部一条线 */
-.checklist-item.drag-before::before,
-.checklist-item.drag-after::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: var(--accent);
-  border-radius: 1px;
-  pointer-events: none;
-}
-.checklist-item.drag-before::before {
-  top: -1px;
-}
-.checklist-item.drag-after::after {
-  bottom: -1px;
 }
 
 /* 复选框 */
@@ -316,7 +228,14 @@ function onDrop(e: DragEvent) {
   padding: 4px 6px;
 }
 .item-action:hover {
-  color: var(--danger);
+  color: var(--accent);
+}
+.item-action:disabled {
+  color: var(--border);
+  cursor: not-allowed;
+}
+.item-action:disabled:hover {
+  color: var(--border);
 }
 .pin-action.active {
   color: var(--accent);
@@ -327,5 +246,11 @@ function onDrop(e: DragEvent) {
 }
 .checklist-item.pinned .pin-action {
   opacity: 1;
+}
+
+/* 上移/下移按钮稍小 */
+.move-action {
+  font-size: 10px;
+  padding: 4px 5px;
 }
 </style>

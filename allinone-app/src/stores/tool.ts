@@ -4,13 +4,13 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 
-export type ToolId = 'checklist' | 'gitfast'
+export type ToolId = 'checklist' | 'gitfast' | 'scripts' | 'review' | 'textutils'
 
 const STORAGE_KEY = 'allinone-active-tool'
 
 function detectInitial(): ToolId {
   const saved = localStorage.getItem(STORAGE_KEY) as ToolId | null
-  if (saved === 'checklist' || saved === 'gitfast') return saved
+  if (saved === 'checklist' || saved === 'gitfast' || saved === 'scripts' || saved === 'review' || saved === 'textutils') return saved
   return 'checklist'
 }
 

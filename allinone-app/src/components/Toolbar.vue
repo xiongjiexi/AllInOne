@@ -8,6 +8,9 @@ const tool = useToolStore()
 const tools: { id: ToolId; label: string; icon: string }[] = [
   { id: 'checklist', label: '清单', icon: '📋' },
   { id: 'gitfast', label: 'GitFast', icon: '⚡' },
+  { id: 'scripts', label: 'Script', icon: '📜' },
+  { id: 'review', label: 'Review', icon: '🔀' },
+  { id: 'textutils', label: '文本', icon: '🔤' },
 ]
 </script>
 

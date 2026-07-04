@@ -2,8 +2,8 @@
 import { ref } from 'vue'
 import { useGitFastStore } from '../stores/gitfast'
 import { ptyWrite } from '../lib/backend'
-import { gitBranchList } from '../lib/backend'
-import { renderTemplate, fillAutoParams, templateNeedsUserInput } from '../lib/template'
+import { renderTemplate } from '../lib/template'
+import { templateNeedsUserInput, fillTemplateParams, collectParamOptions } from '../lib/paramHandlers'
 import type { CommandTemplate } from '../types'
 
 const props = defineProps<{
@@ -19,15 +19,15 @@ const runningId = ref<string>('')
 const paramDialog = ref<{
   visible: boolean
   template: CommandTemplate | null
-  branches: string[]
-  selectedBranch: string
-  promptValue: string
+  // 每个参数的选项列表（如分支列表），key 为 param.key
+  options: Record<string, string[]>
+  // 每个参数的用户输入值，key 为 param.key
+  values: Record<string, string>
 }>({
   visible: false,
   template: null,
-  branches: [],
-  selectedBranch: '',
-  promptValue: '',
+  options: {},
+  values: {},
 })
 
 async function onClickTemplate(t: CommandTemplate) {
@@ -43,30 +43,30 @@ async function onClickTemplate(t: CommandTemplate) {
     return
   }
 
-  // 不需要用户输入：直接执行（自动填充 today 参数）
-  await runTemplate(t, fillAutoParams(t))
+  // 不需要用户输入：直接执行（自动填充参数）
+  const context = { repoPath: props.repoPath }
+  await runTemplate(t, fillTemplateParams(t, context))
 }
 
 async function openParamDialog(t: CommandTemplate) {
   paramDialog.value.template = t
-  paramDialog.value.selectedBranch = ''
-  paramDialog.value.promptValue = ''
-  paramDialog.value.branches = []
+  paramDialog.value.options = {}
+  paramDialog.value.values = {}
   paramDialog.value.visible = true
 
-  // 如果有 branch-list 类型参数，预加载分支列表
-  const needBranch = (t.params ?? []).some(p => p.source === 'branch-list')
-  if (needBranch) {
-    try {
-      paramDialog.value.branches = await gitBranchList(props.repoPath)
-      // 默认选当前分支（带 * 标记的会在 backend 过滤掉，这里取第一个）
-      if (paramDialog.value.branches.length > 0) {
-        paramDialog.value.selectedBranch = paramDialog.value.branches[0]
+  // 通过处理器预加载需要选项的参数（如分支列表）
+  try {
+    const options = await collectParamOptions(t, { repoPath: props.repoPath })
+    paramDialog.value.options = options
+    // 对有选项的参数设置默认值（取第一项）
+    for (const [key, list] of Object.entries(options)) {
+      if (list.length > 0) {
+        paramDialog.value.values[key] = list[0]
       }
-    } catch (e: any) {
-      alert(`获取分支列表失败: ${e?.message ?? e}`)
-      paramDialog.value.visible = false
     }
+  } catch (e: any) {
+    alert(`获取参数选项失败: ${e?.message ?? e}`)
+    paramDialog.value.visible = false
   }
 }
 
@@ -78,17 +78,13 @@ function cancelParamDialog() {
 async function confirmParamDialog() {
   const t = paramDialog.value.template
   if (!t) return
-  const values: Record<string, string> = { ...fillAutoParams(t) }
-  for (const p of t.params ?? []) {
-    if (p.source === 'branch-list') {
-      values[p.key] = paramDialog.value.selectedBranch
-    } else if (p.source === 'prompt') {
-      values[p.key] = paramDialog.value.promptValue
-    }
+  const context = {
+    repoPath: props.repoPath,
+    userInput: { ...paramDialog.value.values },
   }
   paramDialog.value.visible = false
   paramDialog.value.template = null
-  await runTemplate(t, values)
+  await runTemplate(t, fillTemplateParams(t, context))
 }
 
 async function runTemplate(t: CommandTemplate, params: Record<string, string>) {
@@ -137,23 +133,17 @@ async function runTemplate(t: CommandTemplate, params: Record<string, string>) {
             >
               <label class="param-label">{{ p.key }}</label>
               <select
-                v-if="p.source === 'branch-list'"
-                v-model="paramDialog.selectedBranch"
+                v-if="paramDialog.options[p.key]"
+                v-model="paramDialog.values[p.key]"
                 class="param-input"
               >
-                <option v-for="b in paramDialog.branches" :key="b" :value="b">{{ b }}</option>
+                <option v-for="opt in paramDialog.options[p.key]" :key="opt" :value="opt">{{ opt }}</option>
               </select>
               <input
-                v-else-if="p.source === 'prompt'"
-                v-model="paramDialog.promptValue"
+                v-else
+                v-model="paramDialog.values[p.key]"
                 class="param-input"
                 :placeholder="`请输入 ${p.key}`"
-              />
-              <input
-                v-else
-                :value="p.source"
-                class="param-input"
-                disabled
               />
             </div>
           </template>

@@ -39,12 +39,10 @@ export const useGitFastStore = defineStore('gitfast', () => {
       if (!map.has(gid)) map.set(gid, [])
       map.get(gid)!.push(r)
     }
-    // 已声明但无仓库的分组也要显示（方便添加仓库时选）
     const result: { group: RepoGroup | null; repos: Repository[] }[] = []
     for (const g of config.value.groups) {
       result.push({ group: g, repos: map.get(g.id) ?? [] })
     }
-    // 未归组的仓库
     const ungrouped = map.get('') ?? []
     if (ungrouped.length > 0) {
       result.push({ group: null, repos: ungrouped })
@@ -57,7 +55,7 @@ export const useGitFastStore = defineStore('gitfast', () => {
     return config.value.repositories.find(r => r.id === selectedRepoId.value) ?? null
   })
 
-  // ===== actions =====
+  // ===== 配置管理 =====
 
   /** 加载用户选择的配置文件 */
   async function chooseAndLoadConfig(): Promise<boolean> {
@@ -84,7 +82,6 @@ export const useGitFastStore = defineStore('gitfast', () => {
       config.value = cfg
       configFilePath.value = path
       localStorage.setItem(LS_CONFIG_PATH, path)
-      // 选中状态失效则清空
       if (selectedRepoId.value && !cfg.repositories.find(r => r.id === selectedRepoId.value)) {
         selectedRepoId.value = ''
       }
@@ -100,7 +97,7 @@ export const useGitFastStore = defineStore('gitfast', () => {
     try {
       await loadAndApplyConfig(configFilePath.value)
     } catch {
-      // 加载失败保持默认配置，错误消息已写入 configError
+      // 加载失败保持默认配置
     }
   }
 
@@ -114,7 +111,6 @@ export const useGitFastStore = defineStore('gitfast', () => {
     if (existing) return existing.sessionId
     const sessionId = await ptySpawn(repoPath)
     sessions.value.set(repoId, { repoId, sessionId })
-    // Map 的引用变更触发响应式
     sessions.value = new Map(sessions.value)
     return sessionId
   }
@@ -126,7 +122,7 @@ export const useGitFastStore = defineStore('gitfast', () => {
     try {
       await ptyKill(s.sessionId)
     } catch {
-      // 忽略：会话可能已退出
+      // 忽略
     }
     sessions.value.delete(repoId)
     sessions.value = new Map(sessions.value)
@@ -146,10 +142,11 @@ export const useGitFastStore = defineStore('gitfast', () => {
     templates,
     reposByGroup,
     selectedRepo,
-    // actions
+    // config actions
     chooseAndLoadConfig,
     loadAndApplyConfig,
     autoLoadLastConfig,
+    // session actions
     selectRepo,
     ensureSession,
     closeSession,

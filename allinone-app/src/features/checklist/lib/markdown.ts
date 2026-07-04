@@ -72,6 +72,64 @@ export function extractUnchecked(parsed: ParsedMarkdown): CheckItem[] {
 }
 
 /**
+ * 把多条待办文本追加到"## 待办"段末尾
+ * - 若文件中已有 "## 待办" 段，则在该段最后一个清单项后追加
+ * - 若无 "## 待办" 段但有其他 "## xxx" 段，则在第一个 "## " 段前插入新段
+ * - 若文件完全空或无任何二级标题，则在末尾追加新段
+ * - 追加的项均为未完成状态 `- [ ] xxx`
+ * @returns 修改后的完整文件内容
+ */
+export function appendItemsToTodo(parsed: ParsedMarkdown, texts: string[]): string {
+  if (texts.length === 0) return parsed.lines.join('\n')
+  const lines = parsed.lines.slice()
+  const todoHeaderRe = /^##\s+待办\s*$/
+
+  // 找到 "## 待办" 段的范围
+  let headerIdx = -1
+  for (let i = 0; i < lines.length; i++) {
+    if (todoHeaderRe.test(lines[i])) {
+      headerIdx = i
+      break
+    }
+  }
+
+  if (headerIdx !== -1) {
+    // 已有待办段：在该段最后一个清单项后追加
+    let insertAt = headerIdx + 1
+    // 跳过段头后的空行
+    while (insertAt < lines.length && lines[insertAt].trim() === '') insertAt++
+    // 找到段内最后一个清单项
+    let lastItemIdx = -1
+    for (let j = headerIdx + 1; j < lines.length; j++) {
+      if (/^##\s+/.test(lines[j])) break // 进入下一个段
+      if (ITEM_RE.test(lines[j])) lastItemIdx = j
+    }
+    insertAt = lastItemIdx !== -1 ? lastItemIdx + 1 : insertAt
+    // 在 insertAt 处插入新项
+    const newLines = texts.map(t => `- [ ] ${t}`)
+    lines.splice(insertAt, 0, ...newLines)
+  } else {
+    // 无待办段：寻找第一个 "## " 段前插入
+    let firstH2 = -1
+    for (let i = 0; i < lines.length; i++) {
+      if (/^##\s+/.test(lines[i])) {
+        firstH2 = i
+        break
+      }
+    }
+    const newLines = ['', '## 待办', '', ...texts.map(t => `- [ ] ${t}`), '']
+    if (firstH2 !== -1) {
+      lines.splice(firstH2, 0, ...newLines)
+    } else {
+      // 文件无任何二级标题：追加到末尾
+      lines.push(...newLines)
+    }
+  }
+
+  return lines.join('\n')
+}
+
+/**
  * 把某一项的物理行从 fromLine 移动到 toLine 之前或之后
  * - 仅搬移该清单项所在的单行（raw），不影响其他非清单行
  * - 返回新的完整文件内容字符串
@@ -94,6 +152,33 @@ export function moveItemLine(
   if (fromLine < toLine) target -= 1
   const insertAt = position === 'before' ? target : target + 1
   lines.splice(insertAt, 0, moved)
+  return lines.join('\n')
+}
+
+/**
+ * 按新的清单项顺序重写文件
+ * - 接收一个完整的 items 数组（已按目标顺序排列）
+ * - 把文件中所有"清单项行"按行号升序替换为新顺序的序列化文本
+ * - 非清单行（标题、空行、备注等）保持原位不动
+ *
+ * 实现思路：
+ *   文件中所有清单项的行号集合记为 itemLines（升序），
+ *   新顺序数组的第 i 项写入 itemLines[i] 这一物理行。
+ *
+ * 注意：调用方需保证 newOrder 的长度等于文件中清单项总数，
+ *      且不包含已删除的项。本函数不校验。
+ */
+export function reorderItems(
+  parsed: ParsedMarkdown,
+  newOrder: CheckItem[]
+): string {
+  const lines = parsed.lines.slice()
+  // 收集所有当前识别为清单项的行号（升序）
+  const itemLineIndices = parsed.items.map(i => i.lineIndex).sort((a, b) => a - b)
+  // 逐行替换：第 i 个清单行写入 newOrder[i] 的序列化文本
+  for (let i = 0; i < itemLineIndices.length && i < newOrder.length; i++) {
+    lines[itemLineIndices[i]] = serializeItem(newOrder[i])
+  }
   return lines.join('\n')
 }
 

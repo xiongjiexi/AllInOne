@@ -18,7 +18,7 @@ const currentRepoPath = computed<string>(() => {
   return store.selectedRepo?.path ?? ''
 })
 
-// 终端面板的 key：切换仓库时强制重建终端（P1 才做"切换时保留输出"，P0 直接重建）
+// 终端面板的 key：切换仓库时强制重建终端
 const terminalKey = computed(() => store.selectedRepoId || '__empty__')
 
 // 终端面板实例引用，用于清屏
@@ -31,7 +31,6 @@ function clearTerminal() {
 // 应用启动时自动加载上次配置
 store.autoLoadLastConfig()
 
-// 选中仓库变化时打印日志（调试用，可移除）
 watch(() => store.selectedRepoId, (id) => {
   if (id) console.debug('[GitFast] selected repo:', id)
 })
@@ -42,7 +41,7 @@ watch(() => store.selectedRepoId, (id) => {
     <RepoList />
 
     <main class="gitfast-main">
-      <!-- 顶部条：配置加载 + 当前仓库 + 清屏 -->
+      <!-- 顶部条：配置加载 + 清屏 -->
       <header class="gf-header">
         <div class="header-left">
           <button
@@ -57,6 +56,7 @@ watch(() => store.selectedRepoId, (id) => {
             {{ store.configFilePath }}
           </span>
         </div>
+
         <div class="header-right">
           <span v-if="store.selectedRepo" class="current-repo">
             {{ store.selectedRepo.name }}

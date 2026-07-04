@@ -1,14 +1,13 @@
 <script setup lang="ts">
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useChecklistStore } from '../stores/checklist'
 import ChecklistItem from './ChecklistItem.vue'
-import type { CheckItem } from '../lib/markdown'
 
 const store = useChecklistStore()
 const newItemText = ref('')
 const inputRef = ref<HTMLTextAreaElement | null>(null)
 
-// 使用重排后的展示列表（置顶在前、已完成沉底）
+// 使用重排后的展示列表（置顶在前，已完成项保持原位）
 const items = computed(() => store.displayItems)
 const title = computed(() => {
   if (!store.hasCurrent) return '清单'
@@ -39,137 +38,40 @@ function autoGrow() {
   el.style.height = el.scrollHeight + 'px'
 }
 
-async function onCarryover() {
-  if (!confirm('将当前清单中未完成的事项迁移到新清单？\n（旧清单会保留）')) return
-  await store.createNextListWithCarryover()
+// ===== 迁移未完成项 =====
+// 下拉菜单：迁移到今日 / 迁移到自定义
+const carryoverMenuOpen = ref(false)
+const carryoverMenuRef = ref<HTMLDivElement | null>(null)
+
+function toggleCarryoverMenu() {
+  carryoverMenuOpen.value = !carryoverMenuOpen.value
+}
+function closeCarryoverMenu() {
+  carryoverMenuOpen.value = false
 }
 
-// ===== 拖拽排序 =====
-// 拖拽状态由父组件统一管理：
-// - dragSourceLine: 正在被拖拽的源项 lineIndex
-// - dragOverLine / dragOverPos: 当前拖放目标项 lineIndex 与插入位置（before/after）
-// 用 lineIndex 作为项标识，避免对象引用变化导致状态失效
-const dragSourceLine = ref<number | null>(null)
-const dragOverLine = ref<number | null>(null)
-const dragOverPos = ref<'before' | 'after' | null>(null)
-// dragenter 计数：dragenter/dragleave 在子元素间冒泡会反复触发，
-// 用计数器只在真正离开整个项时才清空指示
-const enterCounts = new Map<number, number>()
+async function onCarryoverToToday() {
+  closeCarryoverMenu()
+  if (!confirm('将当前清单中未完成的事项迁移到【今日清单】？\n（若今日清单已存在则追加；旧清单保留）')) return
+  await store.carryoverToToday()
+}
 
-function onItemDragstart(item: CheckItem, e: DragEvent) {
-  dragSourceLine.value = item.lineIndex
-  if (e.dataTransfer) {
-    e.dataTransfer.effectAllowed = 'move'
+async function onCarryoverToNamed() {
+  closeCarryoverMenu()
+  const name = window.prompt('请输入目标清单名称（已存在则追加未完成项）：')
+  if (name === null) return
+  await store.carryoverToNamed(name)
+}
+
+// 点击外部关闭下拉
+function onDocClick(e: MouseEvent) {
+  if (!carryoverMenuRef.value) return
+  if (!carryoverMenuRef.value.contains(e.target as Node)) {
+    closeCarryoverMenu()
   }
 }
-
-function onItemDragenter(item: CheckItem, e: DragEvent) {
-  if (dragSourceLine.value === null) return
-  if (item.lineIndex === dragSourceLine.value) {
-    dragOverLine.value = null
-    dragOverPos.value = null
-    return
-  }
-  e.preventDefault()
-  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
-
-  // 计算插入位置：鼠标在项上半部 → before，下半部 → after
-  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-  const offset = e.clientY - rect.top
-  dragOverLine.value = item.lineIndex
-  dragOverPos.value = offset < rect.height / 2 ? 'before' : 'after'
-
-  // 计数
-  enterCounts.set(item.lineIndex, (enterCounts.get(item.lineIndex) ?? 0) + 1)
-}
-
-function onItemDragleave(item: CheckItem) {
-  const c = (enterCounts.get(item.lineIndex) ?? 0) - 1
-  if (c <= 0) {
-    enterCounts.delete(item.lineIndex)
-    if (dragOverLine.value === item.lineIndex) {
-      dragOverLine.value = null
-      dragOverPos.value = null
-    }
-  } else {
-    enterCounts.set(item.lineIndex, c)
-  }
-}
-
-// 整个 items-area 的 dragover：必须 preventDefault 才能 drop
-function onAreaDragover(e: DragEvent) {
-  if (dragSourceLine.value === null) return
-  e.preventDefault()
-  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
-}
-
-// 子项 dragover：也更新指示线位置（更流畅）
-function onItemDragover(item: CheckItem, e: DragEvent) {
-  if (dragSourceLine.value === null) return
-  if (item.lineIndex === dragSourceLine.value) return
-  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-  const offset = e.clientY - rect.top
-  dragOverLine.value = item.lineIndex
-  dragOverPos.value = offset < rect.height / 2 ? 'before' : 'after'
-}
-
-// 执行拖拽搬移的核心逻辑
-async function doMove() {
-  const fromLine = dragSourceLine.value
-  const toLine = dragOverLine.value
-  const pos = dragOverPos.value
-  if (fromLine === null || toLine === null || !pos) return
-
-  const fromItem = store.items.find(i => i.lineIndex === fromLine)
-  const toItem = store.items.find(i => i.lineIndex === toLine)
-  if (!fromItem || !toItem) return
-  await store.moveItem(fromItem, toItem, pos)
-}
-
-// 子项 drop：直接执行搬移（不依赖冒泡到 area）
-async function onItemDrop(item: CheckItem, e: DragEvent) {
-  e.preventDefault()
-  // 确保目标项已记录
-  if (dragOverLine.value !== item.lineIndex) {
-    dragOverLine.value = item.lineIndex
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-    const offset = e.clientY - rect.top
-    dragOverPos.value = offset < rect.height / 2 ? 'before' : 'after'
-  }
-  await doMove()
-  // 清理状态
-  dragSourceLine.value = null
-  dragOverLine.value = null
-  dragOverPos.value = null
-  enterCounts.clear()
-}
-
-// 整个 items-area 的 drop（兜底：若 drop 落在子项间隙）
-async function onAreaDrop(e: DragEvent) {
-  e.preventDefault()
-  await doMove()
-  dragSourceLine.value = null
-  dragOverLine.value = null
-  dragOverPos.value = null
-  enterCounts.clear()
-}
-
-// 拖拽结束（无论是否 drop）清理状态
-function onDragend() {
-  dragSourceLine.value = null
-  dragOverLine.value = null
-  dragOverPos.value = null
-  enterCounts.clear()
-}
-
-// 判断某项是否正在被拖拽
-function isDragging(item: CheckItem): boolean {
-  return dragSourceLine.value === item.lineIndex
-}
-function dragPosOf(item: CheckItem): 'before' | 'after' | null {
-  if (dragOverLine.value === item.lineIndex) return dragOverPos.value
-  return null
-}
+onMounted(() => document.addEventListener('click', onDocClick))
+onBeforeUnmount(() => document.removeEventListener('click', onDocClick))
 </script>
 
 <template>
@@ -188,9 +90,26 @@ function dragPosOf(item: CheckItem): 'before' | 'after' | null {
         </div>
       </div>
       <div class="header-actions" v-if="store.hasCurrent">
-        <button class="btn btn-sm" @click="onCarryover" title="基于当前清单新建下一份，自动迁移未完成项">
-          ⮕ 迁移未完成到新清单
-        </button>
+        <div class="carryover-dropdown" ref="carryoverMenuRef">
+          <button
+            class="btn btn-sm"
+            :class="{ active: carryoverMenuOpen }"
+            @click.stop="toggleCarryoverMenu"
+            title="把当前清单未完成项迁移到另一份清单"
+          >
+            ⮕ 迁移未完成 ▾
+          </button>
+          <div v-if="carryoverMenuOpen" class="carryover-menu">
+            <div class="menu-item" @click="onCarryoverToToday">
+              📅 迁移到今日清单
+              <span class="menu-hint">已存在则追加</span>
+            </div>
+            <div class="menu-item" @click="onCarryoverToNamed">
+              📝 迁移到自定义清单…
+              <span class="menu-hint">输入名称</span>
+            </div>
+          </div>
+        </div>
       </div>
     </header>
 
@@ -223,31 +142,23 @@ function dragPosOf(item: CheckItem): 'before' | 'after' | null {
       </div>
 
       <!-- 清单列表 -->
-      <div
-        class="items-area"
-        @dragover="onAreaDragover"
-        @drop="onAreaDrop"
-      >
+      <div class="items-area">
         <div v-if="items.length === 0" class="empty-items">
           当前清单暂无待办项，添加第一条吧
         </div>
         <ChecklistItem
-          v-for="item in items"
+          v-for="(item, idx) in items"
           :key="item.lineIndex"
           :item="item"
           :pinned="store.isItemPinned(item)"
-          :dragging="isDragging(item)"
-          :drag-over-position="dragPosOf(item)"
+          :is-first="idx === 0"
+          :is-last="idx === items.length - 1"
           @toggle="store.toggleItem"
           @toggle-pin="store.toggleItemPin"
           @edit="store.editItemText"
           @delete="store.deleteItem"
-          @dragstart="onItemDragstart"
-          @dragenter="onItemDragenter"
-          @dragleave="onItemDragleave"
-          @dragover="onItemDragover"
-          @drop="onItemDrop"
-          @dragend="onDragend"
+          @move-up="store.moveItemUp"
+          @move-down="store.moveItemDown"
         />
       </div>
 
@@ -316,6 +227,51 @@ function dragPosOf(item: CheckItem): 'before' | 'after' | null {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+/* 迁移下拉菜单 */
+.carryover-dropdown {
+  position: relative;
+}
+.carryover-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 220px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  z-index: 100;
+  padding: 4px;
+  animation: fadeIn 0.12s ease-out;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.menu-item {
+  padding: 8px 12px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 0.1s;
+}
+.menu-item:hover {
+  background: var(--bg-soft);
+}
+.menu-hint {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.btn.active {
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .checklist-body {

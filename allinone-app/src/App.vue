@@ -3,6 +3,9 @@ import Toolbar from './components/Toolbar.vue'
 import { useToolStore } from './stores/tool'
 import ChecklistTool from './features/checklist/components/ChecklistTool.vue'
 import GitFastTool from './features/gitfast/components/GitFastTool.vue'
+import ScriptTool from './features/scripts/components/ScriptTool.vue'
+import ReviewTool from './features/review/components/ReviewTool.vue'
+import TextUtilsTool from './features/textutils/components/TextUtilsTool.vue'
 
 const tool = useToolStore()
 </script>
@@ -14,6 +17,9 @@ const tool = useToolStore()
       <!-- 用 v-show 而非 v-if，保留各工具状态（清单文件、GitFast 终端） -->
       <ChecklistTool v-show="tool.current === 'checklist'" />
       <GitFastTool v-show="tool.current === 'gitfast'" />
+      <ScriptTool v-show="tool.current === 'scripts'" />
+      <ReviewTool v-show="tool.current === 'review'" />
+      <TextUtilsTool v-show="tool.current === 'textutils'" />
     </div>
   </div>
 </template>

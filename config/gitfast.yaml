@@ -1,0 +1,156 @@
+# GitFast 配置文件示例
+# 用法：
+#   1. 复制本文件为 gitfast-config.yaml
+#   2. 修改下方 repositories 中的 path 为你自己机器上的实际仓库路径
+#   3. 在应用内点"加载配置"选择该文件
+# 路径建议用正斜杠 / 或双引号包裹（避免反斜杠转义问题）
+
+version: 1
+
+settings:
+  maxParallel: 5
+  shell: bash
+
+groups:
+  - id: work
+    name: 工作
+  - id: personal
+    name: 个人
+
+repositories:
+  # 把下面路径改成你自己的仓库
+  - id: allinone
+    name: AllInOne
+    path: D:/Jesse/allinone
+    groupId: personal
+    
+  - id: obsidian
+    name: obsidian
+    path: D:/Obsidian/notes/JesseRoot
+    groupId: personal
+    
+  - id: xjx-test
+    name: xjx-test
+    path: D:/Jesse/xjx-test
+    groupId: personal
+
+  - id: plm-pdm-service
+    name: plm-pdm-service
+    path: D:/plm-xdm/plm-pdm-service
+    groupId: work
+    
+  - id: tcl-skillhub
+    name: tcl-skillhub
+    path: D:/tcl-skillhub
+    groupId: work
+
+templates:
+  - id: sync
+    name: 同步
+    commands:
+      - git pull
+      - git push
+    description: 拉取并推送
+
+  - id: fetch
+    name: 获取
+    commands:
+      - git fetch --all --prune
+    description: 拉取远程引用不合并
+
+  - id: status
+    name: 状态
+    commands:
+      - git status
+    description: 查看工作区状态
+
+  - id: log
+    name: 日志
+    commands:
+      - git log --oneline -20
+    description: 最近 20 条提交
+
+  - id: branch-list
+    name: 分支列表
+    commands:
+      - git branch -a
+    description: 列出本地+远程分支
+
+  - id: branch-switch
+    name: 切换分支
+    commands:
+      - git checkout {branch}
+    description: 切换到指定分支
+    params:
+      - key: branch
+        source: branch-list
+
+  - id: pull-branch
+    name: 拉取分支
+    commands:
+      - git pull origin {branch}
+    description: 拉取指定远程分支
+    params:
+      - key: branch
+        source: branch-list
+
+  - id: rebase-branch
+    name: 变基分支
+    commands:
+      - git fetch origin {branch}
+      - git rebase origin/{branch}
+    description: 变基到指定远程分支
+    params:
+      - key: branch
+        source: branch-list
+
+#  - id: stash
+#    name: 暂存
+#    commands:
+#      - git stash
+#    description: 暂存当前改动
+
+  - id: commit-checklist
+    name: 提交清单
+    commands:
+      - git add -A
+      - git commit -m "sync checklist {date}"
+      - git push
+    description: 用默认消息提交并推送清单改动
+    params:
+      - key: date
+        source: today
+        
+  - id: rebase-tct-develop-branch
+    name: 变基tct-develop
+    commands:
+      - git fetch origin tct-develop
+      - git rebase origin/tct-develop
+    description: 变基到tct-develop
+        
+schedules:
+  - id: daily-sync
+    name: 每日同步
+    repo: allinone       # 关联 repositories[].id
+    template: sync       # 关联 templates[].id
+    rule:
+      type: daily        # daily=每天定时 / interval=间隔
+      time: "09:00"
+    enabled: true
+  - id: daily-sync-obsidian
+    name: 每日同步obsidian
+    repo: obsidian
+    template: sync
+    rule:
+      type: daily
+      time: "09:00"
+    enabled: true
+  - id: daily-sync-plm-pdm-service
+    name: 每日同步plm-pdm-service
+    repo: plm-pdm-service
+    template: sync
+    rule:
+      type: interval
+      minutes: 60
+    enabled: true
+    

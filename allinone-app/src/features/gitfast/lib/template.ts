@@ -27,22 +27,3 @@ export function todayDateStr(): string {
   return `${y}-${m}-${day}`
 }
 
-/**
- * 为模板填充自动参数（today 类型）
- * - branch-list / prompt 类型由 UI 弹框收集，不在此处理
- * - 返回填充后的 ParamValues
- */
-export function fillAutoParams(template: CommandTemplate): ParamValues {
-  const values: ParamValues = {}
-  for (const p of template.params ?? []) {
-    if (p.source === 'today') {
-      values[p.key] = todayDateStr()
-    }
-  }
-  return values
-}
-
-/** 模板是否需要用户输入参数（branch-list 或 prompt 类型） */
-export function templateNeedsUserInput(template: CommandTemplate): boolean {
-  return (template.params ?? []).some(p => p.source === 'branch-list' || p.source === 'prompt')
-}

@@ -36,6 +36,11 @@ export async function fileExists(path: string): Promise<boolean> {
   return await invoke<boolean>('path_exists', { path })
 }
 
+/** 在系统资源管理器中打开并选中文件（Windows: explorer /select; macOS: open -R） */
+export async function openInExplorer(path: string): Promise<void> {
+  await invoke<void>('open_in_explorer', { path })
+}
+
 /**
  * 如果目标文件已存在，自动追加 -2、-3 后缀
  * 返回最终路径
