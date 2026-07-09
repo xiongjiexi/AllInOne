@@ -35,14 +35,14 @@ const commitError = ref('')
 const commitCache = new Map<string, ReviewLatestCommit>()
 
 /** 加载源分支最新提交（带缓存） */
-async function loadLatestCommit(branch: string) {
+async function loadLatestCommit(branch: string, force: boolean = false) {
   if (!branch) {
     latestCommit.value = null
     commitError.value = ''
     return
   }
-  // 命中缓存
-  if (commitCache.has(branch)) {
+  // 命中缓存（非强制刷新）
+  if (!force && commitCache.has(branch)) {
     latestCommit.value = commitCache.get(branch)!
     commitError.value = ''
     return
@@ -61,10 +61,45 @@ async function loadLatestCommit(branch: string) {
   }
 }
 
+/** 刷新最新提交（清除缓存重新拉取），成功后自动填充到评审标题（总是覆盖） */
+async function refreshLatestCommit() {
+  if (!srcBranch.value) return
+  commitCache.delete(srcBranch.value)
+  await loadLatestCommit(srcBranch.value, true)
+  // 刷新成功后自动填充 commit subject 到评审标题（总是覆盖）
+  if (latestCommit.value) {
+    subject.value = latestCommit.value.subject
+  }
+}
+
 // 监听源分支变化，自动加载最新提交
 watch(srcBranch, (branch) => {
   loadLatestCommit(branch)
 })
+
+// 评审地址解析（从 stdout 提取 URL 和评审 ID）+ 一键复制
+const reviewUrl = computed(() => {
+  const out = rt.value.lastResult?.stdout ?? ''
+  // 匹配 "评审地址：https://..." 或 "评审地址: https://..."
+  const m = out.match(/评审地址[：:]\s*(https?:\/\/[^\s<]+)/)
+  return m ? m[1] : ''
+})
+const reviewId = computed(() => {
+  const out = rt.value.lastResult?.stdout ?? ''
+  const m = out.match(/评审ID[：:]\s*(\d+)/)
+  return m ? m[1] : ''
+})
+const urlCopied = ref(false)
+async function copyReviewUrl() {
+  if (!reviewUrl.value) return
+  try {
+    await navigator.clipboard.writeText(reviewUrl.value)
+    urlCopied.value = true
+    setTimeout(() => (urlCopied.value = false), 1500)
+  } catch {
+    // clipboard API 不可用时，降级用选中文本兜底
+  }
+}
 
 // 推荐分支：合并当前分支、上游、最近本地分支（去重，过滤空值）
 const suggestedBranches = computed<string[]>(() => {
@@ -265,6 +300,12 @@ function formatLastRun(ts: number | null): string {
             <span class="commit-hash">{{ latestCommit.hash }}</span>
             <span class="commit-subject">{{ latestCommit.subject }}</span>
           </span>
+          <button
+            v-if="!commitLoading && (latestCommit || commitError)"
+            class="commit-refresh-btn"
+            title="刷新最新提交"
+            @click="refreshLatestCommit"
+          >↻</button>
         </div>
       </div>
 
@@ -313,6 +354,23 @@ function formatLastRun(ts: number | null): string {
 
       <!-- 执行结果 -->
       <div v-if="rt.lastResult" class="result-panel" :class="rt.lastResult.success ? 'ok' : 'fail'">
+        <!-- 成功摘要栏：评审 ID + 评审地址 + 一键复制（仅成功且解析到 URL 时显示） -->
+        <div v-if="rt.lastResult.success && reviewUrl" class="result-summary">
+          <div class="summary-line">
+            <span class="summary-status">✓ 评审创建成功</span>
+            <span v-if="reviewId" class="summary-id">ID: {{ reviewId }}</span>
+          </div>
+          <div class="summary-url-row">
+            <span class="summary-url-label">评审地址</span>
+            <a :href="reviewUrl" target="_blank" rel="noopener noreferrer" class="summary-url-link">{{ reviewUrl }}</a>
+            <button
+              class="copy-icon-btn"
+              :title="urlCopied ? '已复制' : '复制地址'"
+              @click="copyReviewUrl"
+            >{{ urlCopied ? '✓' : '⧉' }}</button>
+          </div>
+        </div>
+
         <div class="result-header">
           <span>{{ rt.lastResult.success ? '✓ 评审创建成功' : '✗ 创建失败' }}</span>
           <span class="result-meta">退出码 {{ rt.lastResult.exit_code }} · 耗时 {{ (rt.lastResult.duration_ms / 1000).toFixed(1) }}s</span>
@@ -383,6 +441,7 @@ function formatLastRun(ts: number | null): string {
   border-radius: var(--radius);
   background: var(--bg);
   overflow: hidden;
+  flex-shrink: 0;  /* 禁止 flex 压缩卡片，强制 .project-list 触发滚动 */
   transition: border-color 0.15s;
 }
 .project-card.expanded {
@@ -521,6 +580,21 @@ function formatLastRun(ts: number | null): string {
   -webkit-user-select: text;
   cursor: text;
 }
+.commit-refresh-btn {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  border-radius: 3px;
+}
+.commit-refresh-btn:hover {
+  color: var(--accent);
+  background: var(--bg);
+}
 
 .form-actions {
   display: flex;
@@ -577,6 +651,71 @@ function formatLastRun(ts: number | null): string {
 .result-panel.fail {
   border-color: #e74c3c;
 }
+
+/* 成功摘要栏 */
+.result-summary {
+  padding: 10px 12px;
+  background: rgba(39, 174, 96, 0.08);
+  border-bottom: 1px solid rgba(39, 174, 96, 0.2);
+}
+.summary-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.summary-status {
+  color: #27ae60;
+  font-weight: 600;
+  font-size: 13px;
+}
+.summary-id {
+  color: var(--text-soft);
+  font-size: 12px;
+}
+.summary-url-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.summary-url-label {
+  color: var(--text-muted);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.summary-url-link {
+  flex: 1;
+  min-width: 0;
+  color: var(--accent);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-decoration: none;
+}
+.summary-url-link:hover {
+  text-decoration: underline;
+}
+.copy-icon-btn {
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-soft);
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.copy-icon-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
 .result-header {
   display: flex;
   justify-content: space-between;

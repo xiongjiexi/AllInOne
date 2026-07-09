@@ -60,12 +60,22 @@ DATA="{\"subject\":\"$SUBJECT_ESC\",\"fullName\":\"$FULLNAME_ESC\",\"info\":\"-\
 echo ""
 echo "正在创建代码评审..."
 
+# 将 JSON 写入临时文件，再用 -d @file 发送
+# 原因：Git Bash 下 curl --data-raw "$DATA" 会经过 MSYS2 参数转换层，
+# 导致 UTF-8 中文被错误转码为 GBK，服务端 JSON 解析失败。
+# 用 -d @file 让 curl 直接读取文件字节流，绕过参数传递的编码转换。
+PAYLOAD_FILE=$(mktemp)
+printf '%s' "$DATA" > "$PAYLOAD_FILE"
+
 # 调用创建评审接口（使用 access_token 自定义请求头鉴权）
 RESPONSE=$(curl -s -X POST "$API_BASE/reviews" \
   -H "Pragma: no-cache" \
   -H "access_token: $ACCESS_TOKEN" \
   -H "Content-Type: application/json;charset=UTF-8" \
-  --data-raw "$DATA")
+  -d "@$PAYLOAD_FILE")
+
+# 清理临时文件
+rm -f "$PAYLOAD_FILE"
 
 # 从 JSON 中提取字段值（纯 bash，支持字符串和数字）
 extract_json_field() {
