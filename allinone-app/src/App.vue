@@ -6,6 +6,7 @@ import GitFastTool from './features/gitfast/components/GitFastTool.vue'
 import ScriptTool from './features/scripts/components/ScriptTool.vue'
 import ReviewTool from './features/review/components/ReviewTool.vue'
 import TextUtilsTool from './features/textutils/components/TextUtilsTool.vue'
+import NotesTool from './features/notes/components/NotesTool.vue'
 
 const tool = useToolStore()
 </script>
@@ -14,11 +15,12 @@ const tool = useToolStore()
   <div class="app-shell">
     <Toolbar />
     <div class="app-body">
-      <!-- 用 v-show 而非 v-if，保留各工具状态（清单文件、GitFast 终端） -->
+      <!-- 用 v-show 而非 v-if，保留各工具状态（清单文件、GitFast 终端、笔记内容） -->
       <ChecklistTool v-show="tool.current === 'checklist'" />
       <GitFastTool v-show="tool.current === 'gitfast'" />
       <ScriptTool v-show="tool.current === 'scripts'" />
       <ReviewTool v-show="tool.current === 'review'" />
+      <NotesTool v-show="tool.current === 'notes'" />
       <TextUtilsTool v-show="tool.current === 'textutils'" />
     </div>
   </div>

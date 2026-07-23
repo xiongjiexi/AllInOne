@@ -38,6 +38,11 @@ repositories:
     name: plm-pdm-service
     path: D:/plm-xdm/plm-pdm-service
     groupId: work
+
+  - id: kt-plm-tcl-plugin
+    name: kt-plm-tcl-plugin
+    path: D:/plm-kt/plm-tcl-plugin
+    groupId: work
     
   - id: tcl-skillhub
     name: tcl-skillhub

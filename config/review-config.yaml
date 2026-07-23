@@ -16,13 +16,21 @@ script: D:/Jesse/allinone/scripts/git-review.sh
 
 # 项目列表
 projects:
-  - id: plm-pdm-service
-    name: plm-pdm-service
+  - id: plm-pdm-service-tct-develop
+    name: pdm-tct-develop
     repoPath: D:/plm-xdm/plm-pdm-service
     repoId: "950381585941725184"
     fullName: rd-plm/plm-pdm-service
     defaultSrcBranch: tct-develop-xjx
     defaultDestBranch: tct-develop
+
+  - id: plm-pdm-service-bd-develop
+    name: pdm-bd-develop
+    repoPath: D:/plm-bd/plm-pdm-service
+    repoId: "950381585941725184"
+    fullName: rd-plm/plm-pdm-service
+    defaultSrcBranch: bd-develop-xjx
+    defaultDestBranch: bd-develop
 
   - id: xjx-test
     name: xjx-test 服务

@@ -10,6 +10,7 @@ const tools: { id: ToolId; label: string; icon: string }[] = [
   { id: 'gitfast', label: 'GitFast', icon: '⚡' },
   { id: 'scripts', label: 'Script', icon: '📜' },
   { id: 'review', label: 'Review', icon: '🔀' },
+  { id: 'notes', label: '笔记', icon: '📓' },
   { id: 'textutils', label: '文本', icon: '🔤' },
 ]
 </script>

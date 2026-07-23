@@ -607,6 +607,97 @@ async fn review_latest_commit(repo_path: String, branch: String) -> Result<Revie
     .map_err(|e| format!("任务调度失败: {}", e))?
 }
 
+// ============================================================
+// Notes 笔记工具命令
+// ============================================================
+
+/// 带元数据的 .md 文件条目（笔记工具专用，一次 IPC 返回名称+大小+修改时间）
+#[derive(serde::Serialize)]
+struct NotesMdFileEntry {
+    name: String,
+    mtime: u64,  // 毫秒时间戳
+    size: u64,   // 字节
+}
+
+/// 列出目录下所有 .md 文件（含元数据，按修改时间倒序）
+/// 与清单的 list_md_files 区别：返回元数据并按 mtime 排序
+#[tauri::command]
+fn notes_list_md_files(dir: String) -> Result<Vec<NotesMdFileEntry>, String> {
+    let path = PathBuf::from(&dir);
+    if !path.is_dir() {
+        return Err(format!("不是有效目录: {}", dir));
+    }
+    let mut entries: Vec<NotesMdFileEntry> = fs::read_dir(&path)
+        .map_err(|e| format!("读取目录失败: {}", e))?
+        .filter_map(|e| e.ok())
+        .filter_map(|e| {
+            let ft = e.file_type().ok()?;
+            if !ft.is_file() { return None; }
+            let name = e.file_name().to_string_lossy().to_string();
+            if !name.to_lowercase().ends_with(".md") { return None; }
+            let meta = e.metadata().ok()?;
+            let mtime = meta.modified().ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0);
+            Some(NotesMdFileEntry { name, mtime, size: meta.len() })
+        })
+        .collect();
+    // 按修改时间倒序（最新在前）
+    entries.sort_by(|a, b| b.mtime.cmp(&a.mtime));
+    Ok(entries)
+}
+
+/// 重命名文件（同目录内重命名）
+/// - old: 原绝对路径
+/// - new_name: 新文件名（不含目录，自动拼接原目录）
+#[tauri::command]
+fn notes_rename_file(old: String, new_name: String) -> Result<String, String> {
+    let old_path = PathBuf::from(&old);
+    if !old_path.exists() {
+        return Err(format!("源文件不存在: {}", old));
+    }
+    let parent = old_path.parent()
+        .ok_or_else(|| "无法获取父目录".to_string())?;
+    let new_path = parent.join(&new_name);
+    if new_path.exists() && new_path != old_path {
+        return Err(format!("目标文件已存在: {}", new_path.display()));
+    }
+    fs::rename(&old_path, &new_path)
+        .map_err(|e| format!("重命名失败: {}", e))?;
+    Ok(new_path.to_string_lossy().to_string())
+}
+
+/// 删除文件
+#[tauri::command]
+fn notes_delete_file(path: String) -> Result<(), String> {
+    let p = PathBuf::from(&path);
+    if !p.exists() {
+        return Err(format!("文件不存在: {}", path));
+    }
+    fs::remove_file(&p).map_err(|e| format!("删除失败: {}", e))
+}
+
+/// 文件元数据
+#[derive(serde::Serialize)]
+struct NotesFileStat {
+    mtime: u64,  // 毫秒时间戳
+    size: u64,   // 字节
+}
+
+/// 获取文件修改时间与大小（用于冲突检测和侧边栏展示）
+#[tauri::command]
+fn notes_file_stat(path: String) -> Result<NotesFileStat, String> {
+    let meta = fs::metadata(&path)
+        .map_err(|e| format!("读取文件信息失败 [{}]: {}", path, e))?;
+    let mtime = meta.modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    Ok(NotesFileStat { mtime, size: meta.len() })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -638,6 +729,11 @@ pub fn run() {
             review_branch_list,
             review_repo_status,
             review_latest_commit,
+            // Notes 笔记相关命令
+            notes_list_md_files,
+            notes_rename_file,
+            notes_delete_file,
+            notes_file_stat,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
